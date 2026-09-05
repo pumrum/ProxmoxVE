@@ -22,6 +22,9 @@ if [[ ! -f /usr/lib/libjemalloc.so ]]; then
 fi
 msg_ok "Installed Dependencies"
 
+JELLYFIN_COMPONENTS="main"
+[[ "${var_jellyfin_channel:-stable}" == "unstable" ]] && JELLYFIN_COMPONENTS="main unstable"
+
 msg_info "Setting up Jellyfin Repository"
 JELLYFIN_REPO_URL="https://repo.jellyfin.org/$(get_os_info id)"
 JELLYFIN_SUITE="$(get_fallback_suite "$(get_os_info id)" "$(get_os_info codename)" "$JELLYFIN_REPO_URL")"
@@ -29,13 +32,25 @@ setup_deb822_repo \
   "jellyfin" \
   "https://repo.jellyfin.org/jellyfin_team.gpg.key" \
   "$JELLYFIN_REPO_URL" \
-  "$JELLYFIN_SUITE"
+  "$JELLYFIN_SUITE" \
+  "$JELLYFIN_COMPONENTS"
 msg_ok "Set up Jellyfin Repository"
+
+if [[ "${var_jellyfin_channel:-stable}" == "unstable" ]]; then
+  JELLYFIN_CANDIDATE="$(apt-cache policy jellyfin-server | awk '/Candidate:/{print $2}')"
+  if [[ "$JELLYFIN_CANDIDATE" != 12.* ]]; then
+    msg_error "Jellyfin unstable component resolved to ${JELLYFIN_CANDIDATE:-nothing} instead of a 12.x pre-release. Jellyfin pauses its weekly unstable builds for a week or two around each release, and during that window unstable silently falls back to stable. Aborting instead of installing stable without asking — retry later, or install with var_jellyfin_channel=stable."
+    exit 1
+  fi
+fi
 
 msg_info "Installing Jellyfin"
 ensure_dependencies jellyfin jellyfin-ffmpeg7
 ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/bin/ffmpeg
 ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/bin/ffprobe
+if [[ "${var_jellyfin_channel:-stable}" == "unstable" ]]; then
+  $STD apt-mark hold jellyfin jellyfin-server jellyfin-web
+fi
 msg_ok "Installed Jellyfin"
 
 setup_hwaccel "jellyfin"

@@ -17,6 +17,7 @@ var_version="${var_version:-24.04}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_gpu="${var_gpu:-yes}"
+export var_jellyfin_channel="${var_jellyfin_channel:-stable}"
 
 header_info "$APP"
 variables
@@ -51,11 +52,20 @@ function update_script() {
   msg_info "Setting up Jellyfin Repository"
   JELLYFIN_REPO_URL="https://repo.jellyfin.org/$(get_os_info id)"
   JELLYFIN_SUITE="$(get_fallback_suite "$(get_os_info id)" "$(get_os_info codename)" "$JELLYFIN_REPO_URL")"
+  # Derive components from the existing sources file, not var_jellyfin_channel:
+  # setup_deb822_repo rewrites jellyfin.sources on every update run, so a
+  # variable-driven choice here would silently pull an unstable install back
+  # to stable. The file on disk is the single source of truth.
+  JELLYFIN_COMPONENTS="main"
+  if [[ -f /etc/apt/sources.list.d/jellyfin.sources ]] && grep -qE '^Components:.*\bunstable\b' /etc/apt/sources.list.d/jellyfin.sources; then
+    JELLYFIN_COMPONENTS="main unstable"
+  fi
   setup_deb822_repo \
     "jellyfin" \
     "https://repo.jellyfin.org/jellyfin_team.gpg.key" \
     "$JELLYFIN_REPO_URL" \
-    "$JELLYFIN_SUITE"
+    "$JELLYFIN_SUITE" \
+    "$JELLYFIN_COMPONENTS"
   msg_ok "Set up Jellyfin Repository"
 
   msg_info "Updating Jellyfin"
