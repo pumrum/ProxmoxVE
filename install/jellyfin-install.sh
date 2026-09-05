@@ -37,9 +37,14 @@ setup_deb822_repo \
 msg_ok "Set up Jellyfin Repository"
 
 if [[ "${var_jellyfin_channel:-stable}" == "unstable" ]]; then
-  JELLYFIN_CANDIDATE="$(apt-cache policy jellyfin-server | awk '/Candidate:/{print $2}')"
-  if [[ "$JELLYFIN_CANDIDATE" != 12.* ]]; then
-    msg_error "Jellyfin unstable component resolved to ${JELLYFIN_CANDIDATE:-nothing} instead of a 12.x pre-release. Jellyfin pauses its weekly unstable builds for a week or two around each release, and during that window unstable silently falls back to stable. Aborting instead of installing stable without asking — retry later, or install with var_jellyfin_channel=stable."
+  # Jellyfin's unstable versions are build timestamps (e.g. 2026090423+ubu2404),
+  # not a predictable semver range, so the only reliable signal is which apt
+  # component actually served the resolved candidate — not what its version
+  # string looks like.
+  JELLYFIN_CANDIDATE="$(apt-cache policy jellyfin-server | awk '/^ *Candidate:/{print $2; exit}')"
+  JELLYFIN_CANDIDATE_SOURCE="$(apt-cache madison jellyfin-server | awk -F'|' -v v="$JELLYFIN_CANDIDATE" '{gsub(/^[ \t]+|[ \t]+$/,"",$2); if ($2==v) {print $3; exit}}')"
+  if [[ "$JELLYFIN_CANDIDATE_SOURCE" != *"/unstable "* ]]; then
+    msg_error "Jellyfin unstable component's candidate (${JELLYFIN_CANDIDATE:-unknown}) is not being served from the unstable component. Jellyfin pauses its weekly unstable builds for a week or two around each release, and during that window unstable silently falls back to stable. Aborting instead of installing stable without asking — retry later, or install with var_jellyfin_channel=stable."
     exit 1
   fi
 fi
